@@ -1,0 +1,240 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import shutil
+import tempfile
+from pathlib import Path
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from f_server.auth.api_keys import audit_event, package_allowed, require_api_key
+from f_server.db import get_session
+from f_server.fdroid.parse import ApkInfo, parse_apk
+from f_server.models import ApiKey, App, Asset, Version, utcnow
+from f_server.security.pinning import pin_first_signer, signer_allowed
+from f_server.services.rebuild import rebuild_repo
+from f_server.storage import get_storage
+
+router = APIRouter(prefix="/api/v1", tags=["upload"])
+
+
+class UploadMetadata(BaseModel):
+    name: str | None = None
+    summary: str | None = None
+    description: str | None = None
+    categories: list[str] = Field(default_factory=list)
+    changelog: str | None = None
+    release_channel: str = "release"
+
+
+class UploadResponse(BaseModel):
+    status: str
+    packageName: str
+    versionCode: int
+    versionName: str | None
+    signer: str
+    apkName: str
+    sha256: str
+    size: int
+    indexFiles: list[str] = Field(default_factory=list)
+
+
+@router.post("/upload", response_model=UploadResponse)
+def upload_apk(
+    request: Request,
+    apk: Annotated[UploadFile, File()],
+    metadata: Annotated[str | None, Form()] = None,
+    icon: Annotated[UploadFile | None, File()] = None,
+    screenshots: Annotated[list[UploadFile] | None, File()] = None,
+    api_key: ApiKey = Depends(require_api_key),
+    session: Session = Depends(get_session),
+) -> UploadResponse:
+    parsed_metadata = _parse_metadata(metadata)
+    with tempfile.TemporaryDirectory(prefix="f-server-upload-") as tmp:
+        tmp_apk = Path(tmp) / "upload.apk"
+        sha256 = hashlib.sha256()
+        size = 0
+        with tmp_apk.open("wb") as out:
+            while chunk := apk.file.read(1024 * 1024):
+                size += len(chunk)
+                sha256.update(chunk)
+                out.write(chunk)
+        try:
+            info = parse_apk(tmp_apk)
+        except Exception as exc:
+            audit_event(session, request, api_key.label, "upload", None, None, "422-unparsable")
+            raise HTTPException(status_code=422, detail=f"unparsable APK: {exc}") from exc
+
+        _authorize_scope(session, request, api_key, info)
+        digest = sha256.hexdigest()
+        existing = session.scalar(
+            select(Version).where(
+                Version.package_name == info.package_name,
+                Version.version_code == info.version_code,
+                Version.signer_fingerprint == info.signer_fingerprint,
+            )
+        )
+        if existing:
+            audit_event(
+                session,
+                request,
+                api_key.label,
+                "upload",
+                info.package_name,
+                info.version_code,
+                "200-idempotent",
+            )
+            return _response("exists", existing, [])
+
+        app = session.get(App, info.package_name)
+        if app is None:
+            if "create" not in api_key.permissions:
+                audit_event(session, request, api_key.label, "upload", info.package_name, info.version_code, "403-create")
+                raise HTTPException(status_code=403, detail="API key cannot create new packages")
+            app = App(
+                package_name=info.package_name,
+                name=parsed_metadata.name or info.label or info.package_name,
+                summary=parsed_metadata.summary,
+                description=parsed_metadata.description,
+                categories=parsed_metadata.categories,
+            )
+            session.add(app)
+            session.flush()
+            pin_first_signer(session, app, info.signer_fingerprint, api_key.label)
+        elif not signer_allowed(session, info.package_name, info.signer_fingerprint):
+            audit_event(session, request, api_key.label, "upload", info.package_name, info.version_code, "422-cert")
+            raise HTTPException(status_code=422, detail="APK signing certificate does not match pinned package key")
+        else:
+            _update_app_metadata(app, parsed_metadata)
+
+        apk_name = f"{info.package_name}_{info.version_code}_{info.signer_fingerprint[:7]}.apk"
+        storage_key = f"repo/{apk_name}"
+        with tmp_apk.open("rb") as fp:
+            get_storage().put(storage_key, fp, "application/vnd.android.package-archive")
+
+        version = Version(
+            package_name=info.package_name,
+            version_name=info.version_name,
+            version_code=info.version_code,
+            apk_name=apk_name,
+            storage_key=storage_key,
+            size=size,
+            sha256_hash=digest,
+            min_sdk=info.min_sdk,
+            target_sdk=info.target_sdk,
+            max_sdk=info.max_sdk,
+            nativecode=list(info.nativecode),
+            permissions=list(info.permissions),
+            signer_fingerprint=info.signer_fingerprint,
+            release_channel=parsed_metadata.release_channel,
+        )
+        session.add(version)
+        app.last_updated = utcnow()
+        app.suggested_version_code = max(app.suggested_version_code or 0, info.version_code)
+        if icon is not None:
+            _store_icon(session, icon, app.package_name)
+        if screenshots:
+            _store_screenshots(session, screenshots, app.package_name)
+        session.commit()
+        session.refresh(version)
+        index_files = rebuild_repo(session)
+        audit_event(session, request, api_key.label, "upload", info.package_name, info.version_code, "201")
+        return _response("created", version, index_files)
+
+
+@router.get("/packages/{package_name}")
+def get_package(package_name: str, session: Session = Depends(get_session)) -> dict:
+    app = session.get(App, package_name)
+    if app is None:
+        raise HTTPException(status_code=404, detail="package not found")
+    versions = session.scalars(
+        select(Version).where(Version.package_name == package_name).order_by(Version.version_code.desc())
+    ).all()
+    return {
+        "packageName": app.package_name,
+        "name": app.name,
+        "summary": app.summary,
+        "description": app.description,
+        "categories": app.categories,
+        "versions": [
+            {
+                "versionCode": v.version_code,
+                "versionName": v.version_name,
+                "apkName": v.apk_name,
+                "sha256": v.sha256_hash,
+                "size": v.size,
+                "signer": v.signer_fingerprint,
+                "releaseChannel": v.release_channel,
+            }
+            for v in versions
+        ],
+    }
+
+
+def _parse_metadata(raw: str | None) -> UploadMetadata:
+    if not raw:
+        return UploadMetadata()
+    try:
+        return UploadMetadata.model_validate(json.loads(raw))
+    except (json.JSONDecodeError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail=f"invalid metadata JSON: {exc}") from exc
+
+
+def _authorize_scope(session: Session, request: Request, api_key: ApiKey, info: ApkInfo) -> None:
+    if "upload" not in api_key.permissions:
+        audit_event(session, request, api_key.label, "upload", info.package_name, info.version_code, "403-permission")
+        raise HTTPException(status_code=403, detail="API key cannot upload")
+    if not package_allowed(api_key, info.package_name):
+        audit_event(session, request, api_key.label, "upload", info.package_name, info.version_code, "403-scope")
+        raise HTTPException(status_code=403, detail="package is outside API key scope")
+
+
+def _update_app_metadata(app: App, metadata: UploadMetadata) -> None:
+    if metadata.name:
+        app.name = metadata.name
+    if metadata.summary:
+        app.summary = metadata.summary
+    if metadata.description:
+        app.description = metadata.description
+    if metadata.categories:
+        app.categories = metadata.categories
+
+
+def _store_icon(session: Session, icon: UploadFile, package_name: str) -> None:
+    suffix = Path(icon.filename or "icon.png").suffix or ".png"
+    key = f"repo/{package_name}/en-US/icon{suffix}"
+    with tempfile.SpooledTemporaryFile(max_size=1024 * 1024 * 4) as tmp:
+        shutil.copyfileobj(icon.file, tmp)
+        tmp.seek(0)
+        get_storage().put(key, tmp, icon.content_type or "application/octet-stream")
+    session.add(Asset(package_name=package_name, locale="en-US", kind="icon", storage_key=key))
+
+
+def _store_screenshots(session: Session, screenshots: list[UploadFile], package_name: str) -> None:
+    for index, screenshot in enumerate(screenshots, start=1):
+        suffix = Path(screenshot.filename or "screenshot.png").suffix or ".png"
+        key = f"repo/{package_name}/en-US/phoneScreenshots/{index:02d}{suffix}"
+        with tempfile.SpooledTemporaryFile(max_size=1024 * 1024 * 8) as tmp:
+            shutil.copyfileobj(screenshot.file, tmp)
+            tmp.seek(0)
+            get_storage().put(key, tmp, screenshot.content_type or "application/octet-stream")
+        session.add(Asset(package_name=package_name, locale="en-US", kind="screenshot", storage_key=key))
+
+
+def _response(status_text: str, version: Version, index_files: list[str]) -> UploadResponse:
+    return UploadResponse(
+        status=status_text,
+        packageName=version.package_name,
+        versionCode=version.version_code,
+        versionName=version.version_name,
+        signer=version.signer_fingerprint,
+        apkName=version.apk_name,
+        sha256=version.sha256_hash,
+        size=version.size,
+        indexFiles=index_files,
+    )
