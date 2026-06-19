@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from f_server.auth.api_keys import audit_event, package_allowed, require_api_key
+from f_server.config import get_settings
 from f_server.db import get_session
 from f_server.fdroid.parse import ApkInfo, parse_apk
 from f_server.models import ApiKey, App, Asset, Version, utcnow
@@ -55,6 +56,7 @@ def upload_apk(
     session: Session = Depends(get_session),
 ) -> UploadResponse:
     parsed_metadata = _parse_metadata(metadata)
+    verify_signing_keys = get_settings().uploads.verify_signing_keys
     with tempfile.TemporaryDirectory(prefix="f-server-upload-") as tmp:
         tmp_apk = Path(tmp) / "upload.apk"
         sha256 = hashlib.sha256()
@@ -105,8 +107,9 @@ def upload_apk(
             )
             session.add(app)
             session.flush()
-            pin_first_signer(session, app, info.signer_fingerprint, api_key.label)
-        elif not signer_allowed(session, info.package_name, info.signer_fingerprint):
+            if verify_signing_keys:
+                pin_first_signer(session, app, info.signer_fingerprint, api_key.label)
+        elif verify_signing_keys and not signer_allowed(session, info.package_name, info.signer_fingerprint):
             audit_event(session, request, api_key.label, "upload", info.package_name, info.version_code, "422-cert")
             raise HTTPException(status_code=422, detail="APK signing certificate does not match pinned package key")
         else:

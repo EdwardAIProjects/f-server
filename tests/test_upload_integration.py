@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from f_server.auth.api_keys import create_api_key
-from f_server.config import RepoConfig, Settings, StorageConfig
+from f_server.config import RepoConfig, Settings, StorageConfig, UploadsConfig
 from f_server.db import Base, get_session
 from f_server.main import create_app
 from f_server.models import AllowedSigningKey, App, AuditLog, Version
@@ -101,6 +101,60 @@ def test_real_apk_upload_tofu_idempotency_scope_and_cert_mismatch(tmp_path, monk
         assert session.scalar(select(Version).where(Version.package_name == package_name)).version_code == 1
         assert storage.exists(f"repo/{package_name}/en-US/phoneScreenshots/01.png")
         assert session.scalar(select(AuditLog).where(AuditLog.result == "422-cert"))
+
+
+def test_upload_can_disable_signing_key_verification(tmp_path, monkeypatch) -> None:
+    storage = LocalStorage(tmp_path / "storage")
+    settings = Settings(
+        database_url="sqlite:///:memory:",
+        repo=RepoConfig(),
+        storage=StorageConfig(),
+        uploads=UploadsConfig(verify_signing_keys=False),
+    )
+    engine = create_engine(
+        settings.database_url,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    testing_session = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+
+    def override_session():
+        with testing_session() as session:
+            yield session
+
+    monkeypatch.setattr("f_server.routers.upload.get_settings", lambda: settings)
+    monkeypatch.setattr("f_server.routers.upload.get_storage", lambda: storage)
+    monkeypatch.setattr("f_server.routers.repo.get_storage", lambda: storage)
+    monkeypatch.setattr("f_server.services.rebuild.get_storage", lambda: storage)
+    monkeypatch.setattr("f_server.services.rebuild.get_settings", lambda: settings)
+    monkeypatch.setattr("f_server.main.create_all", lambda: None)
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+
+    package_name = "com.example.unpinned"
+    apk_v1 = build_signed_apk(tmp_path / "apks", package_name, 1, "1.0", "signer-one")
+    apk_v2_wrong_signer = build_signed_apk(tmp_path / "apks", package_name, 2, "2.0", "signer-two")
+
+    with testing_session() as session:
+        upload_key = create_api_key(session, "fixture", [package_name]).secret
+
+    with TestClient(app) as client:
+        created = _upload(client, apk_v1, upload_key)
+        assert created.status_code == 200
+        assert created.json()["status"] == "created"
+
+        signer_change = _upload(client, apk_v2_wrong_signer, upload_key)
+        assert signer_change.status_code == 200
+        assert signer_change.json()["status"] == "created"
+        assert signer_change.json()["versionCode"] == 2
+
+    with testing_session() as session:
+        versions = session.scalars(select(Version).where(Version.package_name == package_name)).all()
+        assert len(versions) == 2
+        assert not session.scalar(select(AllowedSigningKey).where(AllowedSigningKey.package_name == package_name))
+        assert not session.scalar(select(AuditLog).where(AuditLog.result == "422-cert"))
 
 
 def _upload(

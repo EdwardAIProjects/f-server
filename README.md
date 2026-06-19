@@ -40,6 +40,7 @@ download_auth:
   mode: none
 uploads:
   onboarding: tofu_scoped
+  verify_signing_keys: true
 ```
 
 ### Configuration reference
@@ -77,7 +78,8 @@ The YAML keys below can be set in `config.yaml`. The equivalent environment vari
 | `download_auth.mode` | `FS_DOWNLOAD_AUTH__MODE` | `none` | Repository download authentication mode. Supported values are `none` and `basic`. |
 | `download_auth.username` | `FS_DOWNLOAD_AUTH__USERNAME` | `fdroid` | Username for `basic` repository download authentication. |
 | `download_auth.password` | `FS_DOWNLOAD_AUTH__PASSWORD` | unset | Password for `basic` repository download authentication. Required when `download_auth.mode` is `basic`. |
-| `uploads.onboarding` | `FS_UPLOADS__ONBOARDING` | `tofu_scoped` | Upload onboarding policy. The current supported value pins the first signing certificate for an in-scope package. |
+| `uploads.onboarding` | `FS_UPLOADS__ONBOARDING` | `tofu_scoped` | Upload onboarding policy. The current supported value pins the first signing certificate for an in-scope package when signing-key verification is enabled. |
+| `uploads.verify_signing_keys` | `FS_UPLOADS__VERIFY_SIGNING_KEYS` | `true` | Whether uploads must match pinned APK signing certificates. Set to `false` to skip first-upload pinning and later signing-key mismatch rejection. |
 
 The example compose stack also uses container-specific variables that are not read directly by f-server:
 
@@ -144,6 +146,8 @@ Every upload must pass both checks:
 
 - API key scope: the bearer token must allow the APK package name, using exact names or globs such as `com.example.*`.
 - APK signing pin: the first upload for a new package pins its signing certificate fingerprint. Later uploads must match a pinned fingerprint unless an admin adds a rotated key.
+
+Set `uploads.verify_signing_keys=false` or `FS_UPLOADS__VERIFY_SIGNING_KEYS=false` only if package scope is sufficient for your deployment. With verification disabled, f-server still records each APK signer but does not reject signer changes.
 
 The Android signing key is never uploaded to f-server.
 

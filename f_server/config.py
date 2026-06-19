@@ -51,6 +51,7 @@ class DownloadAuthConfig(BaseModel):
 
 class UploadsConfig(BaseModel):
     onboarding: Literal["tofu_scoped"] = "tofu_scoped"
+    verify_signing_keys: bool = True
 
 
 class Settings(BaseSettings):
