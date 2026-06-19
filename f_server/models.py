@@ -125,6 +125,8 @@ class RegistrySettings(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     downloads_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    username: Mapped[str | None] = mapped_column(String(255))
+    hashed_password: Mapped[str | None] = mapped_column(String(512))
 
 
 class AuditLog(Base):

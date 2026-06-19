@@ -14,6 +14,8 @@ def upgrade() -> None:
         "registry_settings",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("downloads_locked", sa.Boolean(), nullable=False),
+        sa.Column("username", sa.String(length=255), nullable=True),
+        sa.Column("hashed_password", sa.String(length=512), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
 

@@ -43,11 +43,6 @@ class AdminAuthConfig(BaseModel):
     scopes: str = "openid profile email"
 
 
-class DownloadAuthConfig(BaseModel):
-    username: str = "fdroid"
-    password: str | None = None
-
-
 class UploadsConfig(BaseModel):
     onboarding: Literal["tofu_scoped"] = "tofu_scoped"
     verify_signing_keys: bool = True
@@ -65,7 +60,6 @@ class Settings(BaseSettings):
     storage: StorageConfig = Field(default_factory=StorageConfig)
     repo: RepoConfig = Field(default_factory=RepoConfig)
     admin_auth: AdminAuthConfig = Field(default_factory=AdminAuthConfig)
-    download_auth: DownloadAuthConfig = Field(default_factory=DownloadAuthConfig)
     uploads: UploadsConfig = Field(default_factory=UploadsConfig)
 
 

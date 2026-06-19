@@ -20,20 +20,6 @@
     </table>
   </div>
   <aside>
-    <h2>Registry Access</h2>
-    <p>Status: <strong>{{ "locked" if registry_locked else "unlocked" }}</strong></p>
-    {% if not download_auth_configured %}
-    <p class="muted">Set a download password before locking the registry.</p>
-    {% endif %}
-    {% if registry_locked %}
-    <form method="post" action="/admin/registry/unlock">
-      <button type="submit">Unlock registry</button>
-    </form>
-    {% else %}
-    <form method="post" action="/admin/registry/lock">
-      <button type="submit" {% if not download_auth_configured %}disabled{% endif %}>Lock registry</button>
-    </form>
-    {% endif %}
     <h2>API Keys</h2>
     {% if error %}
     <div class="notice error">

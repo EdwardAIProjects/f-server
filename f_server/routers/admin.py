@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from f_server.auth.admin import oidc_client, oidc_enabled, require_admin
-from f_server.auth.api_keys import create_api_key
+from f_server.auth.api_keys import create_api_key, hash_secret
 from f_server.config import get_settings
 from f_server.db import get_session
 from f_server.fdroid.sign import SigningConfigurationError
@@ -152,25 +152,35 @@ def rebuild(
     return RedirectResponse("/admin", status_code=303)
 
 
+@router.get("/registry", response_class=HTMLResponse)
+def registry_access(
+    request: Request,
+    admin: str = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    return templates.TemplateResponse(request, "admin/registry.html", _registry_context(session))
+
+
 @router.post("/registry/lock")
 def lock_registry(
     request: Request,
     admin: str = Depends(require_admin),
     session: Session = Depends(get_session),
 ):
-    if not get_settings().download_auth.password:
+    registry_settings = session.get(RegistrySettings, 1)
+    if not registry_settings or not registry_settings.hashed_password:
         return templates.TemplateResponse(
             request,
-            "admin/index.html",
+            "admin/registry.html",
             {
-                **_dashboard_context(session),
-                "error": "Download password is not configured.",
+                **_registry_context(session),
+                "error": "Registry password is not configured.",
                 "error_title": "Registry lock failed",
             },
             status_code=400,
         )
     _set_registry_locked(session, True, admin)
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse("/admin/registry", status_code=303)
 
 
 @router.post("/registry/unlock")
@@ -179,7 +189,40 @@ def unlock_registry(
     session: Session = Depends(get_session),
 ):
     _set_registry_locked(session, False, admin)
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse("/admin/registry", status_code=303)
+
+
+@router.post("/registry/credentials")
+def update_registry_credentials(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    admin: str = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    if not password:
+        return templates.TemplateResponse(
+            request,
+            "admin/registry.html",
+            {
+                **_registry_context(session),
+                "error": "Registry password cannot be empty.",
+                "error_title": "Registry password failed",
+            },
+            status_code=400,
+        )
+    registry_settings = _registry_settings(session)
+    registry_settings.username = username.strip() or "fdroid"
+    registry_settings.hashed_password = hash_secret(password)
+    session.add(
+        AuditLog(
+            actor=admin,
+            action="registry.credentials",
+            result="ok",
+        )
+    )
+    session.commit()
+    return RedirectResponse("/admin/registry", status_code=303)
 
 
 @router.get("/audit", response_class=HTMLResponse)
@@ -226,20 +269,23 @@ def _dashboard_context(session: Session) -> dict:
         select(App).options(selectinload(App.versions), selectinload(App.signing_keys)).order_by(App.package_name)
     ).all()
     keys = session.scalars(select(ApiKey).order_by(ApiKey.created_at.desc())).all()
-    registry_settings = session.get(RegistrySettings, 1)
     return {
         "apps": apps,
         "keys": keys,
+    }
+
+
+def _registry_context(session: Session) -> dict:
+    registry_settings = session.get(RegistrySettings, 1)
+    return {
         "registry_locked": bool(registry_settings and registry_settings.downloads_locked),
-        "download_auth_configured": bool(get_settings().download_auth.password),
+        "registry_auth_configured": bool(registry_settings and registry_settings.hashed_password),
+        "registry_username": (registry_settings.username if registry_settings else None) or "fdroid",
     }
 
 
 def _set_registry_locked(session: Session, locked: bool, admin: str) -> None:
-    registry_settings = session.get(RegistrySettings, 1)
-    if registry_settings is None:
-        registry_settings = RegistrySettings(id=1)
-        session.add(registry_settings)
+    registry_settings = _registry_settings(session)
     registry_settings.downloads_locked = locked
     session.add(
         AuditLog(
@@ -249,3 +295,11 @@ def _set_registry_locked(session: Session, locked: bool, admin: str) -> None:
         )
     )
     session.commit()
+
+
+def _registry_settings(session: Session) -> RegistrySettings:
+    registry_settings = session.get(RegistrySettings, 1)
+    if registry_settings is None:
+        registry_settings = RegistrySettings(id=1, username="fdroid")
+        session.add(registry_settings)
+    return registry_settings

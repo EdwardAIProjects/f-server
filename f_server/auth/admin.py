@@ -5,7 +5,9 @@ import secrets
 from authlib.integrations.starlette_client import OAuth
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from sqlalchemy.orm import Session
 
+from f_server.auth.api_keys import verify_secret
 from f_server.config import get_settings
 from f_server.db import get_session
 from f_server.models import RegistrySettings
@@ -46,16 +48,15 @@ def require_admin(
 
 def require_download_auth(
     credentials: HTTPBasicCredentials | None = Depends(_basic),
-    session=Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> None:
     registry_settings = session.get(RegistrySettings, 1)
     if not registry_settings or not registry_settings.downloads_locked:
         return
-    cfg = get_settings().download_auth
-    if not cfg.password:
-        raise HTTPException(status_code=500, detail="download basic auth password is not configured")
-    ok = credentials and secrets.compare_digest(credentials.username, cfg.username)
-    ok = bool(ok and secrets.compare_digest(credentials.password, cfg.password))
+    if not registry_settings.username or not registry_settings.hashed_password:
+        raise HTTPException(status_code=500, detail="registry password is not configured")
+    ok = credentials and secrets.compare_digest(credentials.username, registry_settings.username)
+    ok = bool(ok and verify_secret(credentials.password, registry_settings.hashed_password))
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

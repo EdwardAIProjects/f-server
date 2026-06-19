@@ -1,0 +1,37 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<section class="split">
+  <div>
+    <h1>Registry Access</h1>
+    <p>Control whether F-Droid registry downloads under <code>/repo</code> are public or password-protected.</p>
+    {% if error %}
+    <div class="notice error">
+      <strong>{{ error_title or "Registry update failed" }}</strong>
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
+    <p>Status: <strong>{{ "locked" if registry_locked else "unlocked" }}</strong></p>
+    <p>Password: <strong>{{ "set" if registry_auth_configured else "not set" }}</strong></p>
+    {% if not registry_auth_configured %}
+    <p class="muted">Set a registry password before locking downloads.</p>
+    {% endif %}
+    {% if registry_locked %}
+    <form method="post" action="/admin/registry/unlock">
+      <button type="submit">Unlock registry</button>
+    </form>
+    {% else %}
+    <form method="post" action="/admin/registry/lock">
+      <button type="submit" {% if not registry_auth_configured %}disabled{% endif %}>Lock registry</button>
+    </form>
+    {% endif %}
+  </div>
+  <aside>
+    <h2>Registry Password</h2>
+    <form method="post" action="/admin/registry/credentials">
+      <label>Username <input name="username" value="{{ registry_username }}" required></label>
+      <label>Password <input name="password" type="password" required></label>
+      <button type="submit">Save registry password</button>
+    </form>
+  </aside>
+</section>
+{% endblock %}

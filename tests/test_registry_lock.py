@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from f_server.config import DownloadAuthConfig, Settings
+from f_server.config import Settings
 from f_server.db import Base, get_session
 from f_server.main import create_app
 from f_server.models import AuditLog
@@ -16,12 +16,23 @@ def test_admin_can_lock_and_unlock_registry_downloads(tmp_path, monkeypatch) -> 
     app, testing_session = _test_app(
         tmp_path,
         monkeypatch,
-        Settings(database_url="sqlite:///:memory:", download_auth=DownloadAuthConfig(password="secret")),
+        Settings(database_url="sqlite:///:memory:"),
     )
 
     with TestClient(app) as client:
+        registry_page = client.get("/admin/registry")
+        assert registry_page.status_code == 200
+        assert "Registry Access" in registry_page.text
+
         public = client.get("/repo/index-v2.json")
         assert public.status_code == 200
+
+        credentials = client.post(
+            "/admin/registry/credentials",
+            data={"username": "reader", "password": "secret"},
+            follow_redirects=False,
+        )
+        assert credentials.status_code == 303
 
         locked = client.post("/admin/registry/lock", follow_redirects=False)
         assert locked.status_code == 303
@@ -29,10 +40,13 @@ def test_admin_can_lock_and_unlock_registry_downloads(tmp_path, monkeypatch) -> 
         without_password = client.get("/repo/index-v2.json")
         assert without_password.status_code == 401
 
-        wrong_password = client.get("/repo/index-v2.json", auth=("fdroid", "wrong"))
+        wrong_password = client.get("/repo/index-v2.json", auth=("reader", "wrong"))
         assert wrong_password.status_code == 401
 
-        with_password = client.get("/repo/index-v2.json", auth=("fdroid", "secret"))
+        wrong_username = client.get("/repo/index-v2.json", auth=("fdroid", "secret"))
+        assert wrong_username.status_code == 401
+
+        with_password = client.get("/repo/index-v2.json", auth=("reader", "secret"))
         assert with_password.status_code == 200
 
         unlocked = client.post("/admin/registry/unlock", follow_redirects=False)
@@ -43,7 +57,7 @@ def test_admin_can_lock_and_unlock_registry_downloads(tmp_path, monkeypatch) -> 
 
     with testing_session() as session:
         actions = [row.action for row in session.scalars(select(AuditLog).order_by(AuditLog.id))]
-        assert actions == ["registry.lock", "registry.unlock"]
+        assert actions == ["registry.credentials", "registry.lock", "registry.unlock"]
 
 
 def test_admin_cannot_lock_registry_without_download_password(tmp_path, monkeypatch) -> None:
@@ -53,7 +67,7 @@ def test_admin_cannot_lock_registry_without_download_password(tmp_path, monkeypa
         response = client.post("/admin/registry/lock")
 
     assert response.status_code == 400
-    assert "Download password is not configured." in response.text
+    assert "Registry password is not configured." in response.text
 
 
 def _test_app(tmp_path, monkeypatch, settings: Settings):
