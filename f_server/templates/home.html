@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ repo_name }} - f-server</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body class="home-page">
+    <header class="topbar">
+      <a class="brand" href="/">{{ repo_name }}</a>
+      <nav class="topbar-actions">
+        <a class="admin-link" href="/admin">Admin</a>
+      </nav>
+    </header>
+    <main class="home-shell">
+      <section class="home-hero">
+        <h1>{{ repo_name }}</h1>
+        <p class="home-summary">{{ repo_description }}</p>
+        <nav class="home-links" aria-label="Server links">
+          <a href="/repo/index-v2.json">Repository index</a>
+          <a href="/health">Health check</a>
+        </nav>
+      </section>
+    </main>
+  </body>
+</html>

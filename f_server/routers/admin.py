@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from f_server.auth.admin import oidc_client, oidc_enabled, require_admin
 from f_server.auth.api_keys import create_api_key
+from f_server.config import get_settings
 from f_server.db import get_session
 from f_server.fdroid.sign import SigningConfigurationError
 from f_server.models import AllowedSigningKey, ApiKey, App, AuditLog, Version
@@ -15,6 +16,7 @@ from f_server.services.rebuild import rebuild_repo
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="f_server/templates")
+templates.env.globals["repo_name"] = get_settings().repo.name
 
 
 @router.get("", response_class=HTMLResponse)

@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>f-server</title>
+    <title>{{ repo_name }}</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   </head>
   <body>
-    <header>
-      <a class="brand" href="/admin">f-server</a>
-      <nav>
+    <header class="topbar">
+      <a class="brand" href="/">{{ repo_name }}</a>
+      <nav class="topbar-actions">
         <a href="/admin">Apps</a>
         <a href="/admin/audit">Audit</a>
       </nav>
