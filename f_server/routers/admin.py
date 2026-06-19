@@ -11,7 +11,7 @@ from f_server.auth.api_keys import create_api_key
 from f_server.config import get_settings
 from f_server.db import get_session
 from f_server.fdroid.sign import SigningConfigurationError
-from f_server.models import AllowedSigningKey, ApiKey, App, AuditLog, Version
+from f_server.models import AllowedSigningKey, ApiKey, App, AuditLog, RegistrySettings, Version
 from f_server.services.rebuild import rebuild_repo
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -25,11 +25,7 @@ def dashboard(
     admin: str = Depends(require_admin),
     session: Session = Depends(get_session),
 ):
-    apps = session.scalars(
-        select(App).options(selectinload(App.versions), selectinload(App.signing_keys)).order_by(App.package_name)
-    ).all()
-    keys = session.scalars(select(ApiKey).order_by(ApiKey.created_at.desc())).all()
-    return templates.TemplateResponse(request, "admin/index.html", {"apps": apps, "keys": keys})
+    return templates.TemplateResponse(request, "admin/index.html", _dashboard_context(session))
 
 
 @router.get("/apps/{package_name}", response_class=HTMLResponse)
@@ -117,12 +113,10 @@ def create_key(
 ):
     scopes = [item.strip() for item in scope.split(",") if item.strip()]
     created = create_api_key(session, label, scopes, created_by=admin)
-    keys = session.scalars(select(ApiKey).order_by(ApiKey.created_at.desc())).all()
-    apps = session.scalars(select(App).order_by(App.package_name)).all()
     return templates.TemplateResponse(
         request,
         "admin/index.html",
-        {"apps": apps, "keys": keys, "new_secret": created.secret},
+        {**_dashboard_context(session), "new_secret": created.secret},
     )
 
 
@@ -155,6 +149,36 @@ def rebuild(
             {**_dashboard_context(session), "error": str(exc)},
             status_code=400,
         )
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/registry/lock")
+def lock_registry(
+    request: Request,
+    admin: str = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    if not get_settings().download_auth.password:
+        return templates.TemplateResponse(
+            request,
+            "admin/index.html",
+            {
+                **_dashboard_context(session),
+                "error": "Download password is not configured.",
+                "error_title": "Registry lock failed",
+            },
+            status_code=400,
+        )
+    _set_registry_locked(session, True, admin)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/registry/unlock")
+def unlock_registry(
+    admin: str = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    _set_registry_locked(session, False, admin)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -202,4 +226,26 @@ def _dashboard_context(session: Session) -> dict:
         select(App).options(selectinload(App.versions), selectinload(App.signing_keys)).order_by(App.package_name)
     ).all()
     keys = session.scalars(select(ApiKey).order_by(ApiKey.created_at.desc())).all()
-    return {"apps": apps, "keys": keys}
+    registry_settings = session.get(RegistrySettings, 1)
+    return {
+        "apps": apps,
+        "keys": keys,
+        "registry_locked": bool(registry_settings and registry_settings.downloads_locked),
+        "download_auth_configured": bool(get_settings().download_auth.password),
+    }
+
+
+def _set_registry_locked(session: Session, locked: bool, admin: str) -> None:
+    registry_settings = session.get(RegistrySettings, 1)
+    if registry_settings is None:
+        registry_settings = RegistrySettings(id=1)
+        session.add(registry_settings)
+    registry_settings.downloads_locked = locked
+    session.add(
+        AuditLog(
+            actor=admin,
+            action="registry.lock" if locked else "registry.unlock",
+            result="ok",
+        )
+    )
+    session.commit()

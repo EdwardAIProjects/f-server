@@ -13,6 +13,8 @@ uv run uvicorn f_server.main:app --reload
 
 The admin panel is at `http://localhost:8000/admin`, the public repository is under `http://localhost:8000/repo`, and health checks use `GET /health`.
 
+Repository downloads are public by default. Configure `download_auth.username` and `download_auth.password`, then use the admin panel to lock or unlock downloads behind those credentials.
+
 ## Configuration
 
 Configuration is read from `config.yaml`, `.env`, and `FS_`-prefixed environment variables. Nested values use `__`, for example `FS_STORAGE__BACKEND=s3`.
@@ -37,7 +39,8 @@ admin_auth:
   mode: none
   session_secret: change-me
 download_auth:
-  mode: none
+  username: fdroid
+  password: change-me
 uploads:
   onboarding: tofu_scoped
   verify_signing_keys: true
@@ -75,9 +78,8 @@ The YAML keys below can be set in `config.yaml`. The equivalent environment vari
 | `admin_auth.client_secret` | `FS_ADMIN_AUTH__CLIENT_SECRET` | unset | OIDC client secret. Required for OIDC admin login. |
 | `admin_auth.redirect_url` | `FS_ADMIN_AUTH__REDIRECT_URL` | unset | Optional OIDC redirect URL setting. |
 | `admin_auth.scopes` | `FS_ADMIN_AUTH__SCOPES` | `openid profile email` | OIDC scopes requested during admin login. |
-| `download_auth.mode` | `FS_DOWNLOAD_AUTH__MODE` | `none` | Repository download authentication mode. Supported values are `none` and `basic`. |
-| `download_auth.username` | `FS_DOWNLOAD_AUTH__USERNAME` | `fdroid` | Username for `basic` repository download authentication. |
-| `download_auth.password` | `FS_DOWNLOAD_AUTH__PASSWORD` | unset | Password for `basic` repository download authentication. Required when `download_auth.mode` is `basic`. |
+| `download_auth.username` | `FS_DOWNLOAD_AUTH__USERNAME` | `fdroid` | Username used when the admin UI locks repository downloads behind basic auth. |
+| `download_auth.password` | `FS_DOWNLOAD_AUTH__PASSWORD` | unset | Password used when the admin UI locks repository downloads behind basic auth. |
 | `uploads.onboarding` | `FS_UPLOADS__ONBOARDING` | `tofu_scoped` | Upload onboarding policy. The current supported value pins the first signing certificate for an in-scope package when signing-key verification is enabled. |
 | `uploads.verify_signing_keys` | `FS_UPLOADS__VERIFY_SIGNING_KEYS` | `true` | Whether uploads must match pinned APK signing certificates. Set to `false` to skip first-upload pinning and later signing-key mismatch rejection. |
 

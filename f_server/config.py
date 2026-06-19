@@ -44,7 +44,6 @@ class AdminAuthConfig(BaseModel):
 
 
 class DownloadAuthConfig(BaseModel):
-    mode: Literal["none", "basic"] = "none"
     username: str = "fdroid"
     password: str | None = None
 

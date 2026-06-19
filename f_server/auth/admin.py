@@ -7,6 +7,8 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from f_server.config import get_settings
+from f_server.db import get_session
+from f_server.models import RegistrySettings
 
 _basic = HTTPBasic(auto_error=False)
 _oauth = OAuth()
@@ -42,10 +44,14 @@ def require_admin(
     )
 
 
-def require_download_auth(credentials: HTTPBasicCredentials | None = Depends(_basic)) -> None:
-    cfg = get_settings().download_auth
-    if cfg.mode == "none":
+def require_download_auth(
+    credentials: HTTPBasicCredentials | None = Depends(_basic),
+    session=Depends(get_session),
+) -> None:
+    registry_settings = session.get(RegistrySettings, 1)
+    if not registry_settings or not registry_settings.downloads_locked:
         return
+    cfg = get_settings().download_auth
     if not cfg.password:
         raise HTTPException(status_code=500, detail="download basic auth password is not configured")
     ok = credentials and secrets.compare_digest(credentials.username, cfg.username)

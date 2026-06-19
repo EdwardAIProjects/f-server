@@ -120,6 +120,13 @@ class AdminUser(Base):
     roles: Mapped[list[str]] = mapped_column(MutableList.as_mutable(JsonType), default=list)
 
 
+class RegistrySettings(Base):
+    __tablename__ = "registry_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    downloads_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
