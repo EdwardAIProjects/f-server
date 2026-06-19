@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Add {{ repo_name }} - f-server</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body class="home-page">
+    <header class="topbar">
+      <a class="brand" href="/">{{ repo_name }}</a>
+      <nav class="topbar-actions">
+        <a href="/">Home</a>
+        <a href="/admin">Admin</a>
+      </nav>
+    </header>
+    <main class="qr-shell">
+      <section class="qr-panel">
+        <div>
+          <h1>Add repository</h1>
+          <p>{{ repo_description }}</p>
+        </div>
+        <img class="repo-qr" src="/add-repository.svg" alt="QR code for {{ repo_name }}">
+        <div class="repo-url">
+          <span>Repository URL</span>
+          <code>{{ repo_add_url }}</code>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
