@@ -1,0 +1,57 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<section class="split">
+  <div>
+    <h1>Apps</h1>
+    <table>
+      <thead><tr><th>Package</th><th>Name</th><th>Versions</th><th>Signing keys</th></tr></thead>
+      <tbody>
+        {% for app in apps %}
+        <tr>
+          <td><a href="/admin/apps/{{ app.package_name }}">{{ app.package_name }}</a></td>
+          <td>{{ app.name or "" }}</td>
+          <td>{{ app.versions | length }}</td>
+          <td>{{ app.signing_keys | length }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4">No apps uploaded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <aside>
+    <h2>API Keys</h2>
+    {% if new_secret %}
+    <div class="notice">
+      <strong>New key secret</strong>
+      <code>{{ new_secret }}</code>
+    </div>
+    {% endif %}
+    <form method="post" action="/admin/keys">
+      <label>Label <input name="label" required></label>
+      <label>Scopes <input name="scope" placeholder="com.example.app or *" required></label>
+      <button type="submit">Create key</button>
+    </form>
+    <table>
+      <thead><tr><th>Label</th><th>Scopes</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for key in keys %}
+        <tr>
+          <td>{{ key.label }}</td>
+          <td><code>{{ key.allowed_package_globs | join(", ") }}</code></td>
+          <td>{{ "revoked" if key.revoked else "active" }}</td>
+          <td>
+            {% if not key.revoked %}
+            <form method="post" action="/admin/keys/{{ key.id }}/revoke"><button type="submit">Revoke</button></form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" action="/admin/rebuild">
+      <button type="submit">Rebuild repo</button>
+    </form>
+  </aside>
+</section>
+{% endblock %}

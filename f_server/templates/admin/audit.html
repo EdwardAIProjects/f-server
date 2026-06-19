@@ -1,0 +1,20 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>Audit log</h1>
+<table>
+  <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Package</th><th>Version</th><th>IP</th><th>Result</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+    <tr>
+      <td>{{ row.ts }}</td>
+      <td>{{ row.actor or "" }}</td>
+      <td>{{ row.action }}</td>
+      <td>{{ row.package_name or "" }}</td>
+      <td>{{ row.version_code or "" }}</td>
+      <td>{{ row.ip or "" }}</td>
+      <td>{{ row.result }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
