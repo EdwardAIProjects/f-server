@@ -96,7 +96,47 @@ Upload clients and CI jobs use non-`FS_` variables because they are not configur
 | `FSERVER_URL` | Upload client or CI job | Base URL of the f-server instance, for example `https://f-server.example.com`. |
 | `FSERVER_API_KEY` | Upload client or CI job | Bearer token created in f-server for a specific project/package scope. Store this as a CI secret. |
 
-Repo signing requires `keytool`, `jarsigner`, and `apksigner` on the host or container image.
+### Repository signing key
+
+f-server signs the generated F-Droid repository indexes with a repository signing key. This is separate from Android app signing keys: app signing keys stay in each app's build system, while the repository key belongs to the f-server deployment and should remain stable for the life of the repository.
+
+Create a new PKCS12 repository keystore with:
+
+```sh
+uv run f-server init \
+  --keystore ./repo-keystore.p12 \
+  --alias f-server
+```
+
+The command prompts for the keystore password, creates a 4096-bit RSA key, and prints the repository key fingerprint. Configure f-server to use the generated key:
+
+```yaml
+repo:
+  keystore_path: ./repo-keystore.p12
+  keystore_pass: change-me
+  key_alias: f-server
+  key_pass: change-me
+```
+
+For the compose deployment, keep the keystore in the app volume and use the in-container path from `.env.example`:
+
+```sh
+podman compose exec f-server f-server init \
+  --keystore /var/lib/f-server/keystore/repo-keystore.p12 \
+  --alias f-server
+```
+
+```yaml
+repo:
+  keystore_path: /var/lib/f-server/keystore/repo-keystore.p12
+  keystore_pass: change-me
+  key_alias: f-server
+  key_pass: change-me
+```
+
+Back up the keystore and its password. Losing them prevents f-server from signing future updates with the same repository identity, and rotating the repository key requires clients to trust the new repository key. Do not commit the keystore or real passwords to source control.
+
+The equivalent environment overrides are `FS_REPO__KEYSTORE_PATH`, `FS_REPO__KEYSTORE_PASS`, `FS_REPO__KEY_ALIAS`, and `FS_REPO__KEY_PASS`. All four values must be configured for signed indexes; if any are missing, f-server publishes unsigned index files. Repo signing requires `keytool`, `jarsigner`, and `apksigner` on the host or container image.
 
 ## Upload security
 
