@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from f_server.auth.admin import oidc_client, oidc_enabled, require_admin
 from f_server.auth.api_keys import create_api_key
 from f_server.db import get_session
+from f_server.fdroid.sign import SigningConfigurationError
 from f_server.models import AllowedSigningKey, ApiKey, App, AuditLog, Version
 from f_server.services.rebuild import rebuild_repo
 
@@ -138,8 +139,20 @@ def revoke_key(
 
 
 @router.post("/rebuild")
-def rebuild(admin: str = Depends(require_admin), session: Session = Depends(get_session)):
-    rebuild_repo(session)
+def rebuild(
+    request: Request,
+    admin: str = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    try:
+        rebuild_repo(session)
+    except SigningConfigurationError as exc:
+        return templates.TemplateResponse(
+            request,
+            "admin/index.html",
+            {**_dashboard_context(session), "error": str(exc)},
+            status_code=400,
+        )
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -180,3 +193,11 @@ async def oidc_callback(request: Request):
 def logout(request: Request, admin: str = Depends(require_admin)):
     request.session.clear()
     return RedirectResponse("/admin", status_code=303)
+
+
+def _dashboard_context(session: Session) -> dict:
+    apps = session.scalars(
+        select(App).options(selectinload(App.versions), selectinload(App.signing_keys)).order_by(App.package_name)
+    ).all()
+    keys = session.scalars(select(ApiKey).order_by(ApiKey.created_at.desc())).all()
+    return {"apps": apps, "keys": keys}

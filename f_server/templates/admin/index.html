@@ -21,6 +21,12 @@
   </div>
   <aside>
     <h2>API Keys</h2>
+    {% if error %}
+    <div class="notice error">
+      <strong>Rebuild failed</strong>
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
     {% if new_secret %}
     <div class="notice">
       <strong>New key secret</strong>

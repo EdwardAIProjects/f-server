@@ -127,6 +127,12 @@ code {
   padding: 12px;
 }
 
+.notice.error {
+  background: #fff1f2;
+  border-color: #f43f5e;
+  color: #7f1d1d;
+}
+
 @media (max-width: 820px) {
   .split {
     grid-template-columns: 1fr;
