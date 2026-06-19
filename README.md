@@ -42,6 +42,60 @@ uploads:
   onboarding: tofu_scoped
 ```
 
+### Configuration reference
+
+The YAML keys below can be set in `config.yaml`. The equivalent environment variable is shown for deployments that prefer `.env` or process environment overrides. Environment variables start with `FS_`, and nested YAML keys use `__`.
+
+| YAML key | Environment override | Default | Meaning |
+| --- | --- | --- | --- |
+| `database_url` | `FS_DATABASE_URL` | `sqlite:///./f-server.db` | SQLAlchemy database URL. Use SQLite for a single local instance or Postgres for container/server deployments. |
+| `storage.backend` | `FS_STORAGE__BACKEND` | `local` | Storage backend for APKs and generated repo files. Supported values are `local` and `s3`. |
+| `storage.local_path` | `FS_STORAGE__LOCAL_PATH` | `./data/storage` | Directory used by the `local` storage backend. |
+| `storage.endpoint` | `FS_STORAGE__ENDPOINT` | unset | S3-compatible endpoint used by the server, for example `http://minio:9000`. Leave unset for AWS S3's standard endpoint. |
+| `storage.public_base_url` | `FS_STORAGE__PUBLIC_BASE_URL` | unset | Public endpoint used when generating download URLs. For MinIO in compose this is usually a host-reachable URL such as `http://127.0.0.1:9000`. |
+| `storage.bucket` | `FS_STORAGE__BUCKET` | `f-server` | S3 bucket that stores APKs and repo files. |
+| `storage.region` | `FS_STORAGE__REGION` | `us-east-1` | S3 region. MinIO commonly uses `us-east-1`. |
+| `storage.access_key` | `FS_STORAGE__ACCESS_KEY` | unset | S3 access key. Required for MinIO unless credentials are supplied by the runtime environment. |
+| `storage.secret_key` | `FS_STORAGE__SECRET_KEY` | unset | S3 secret key. Required for MinIO unless credentials are supplied by the runtime environment. |
+| `repo.name` | `FS_REPO__NAME` | `f-server` | Repository name written into F-Droid index metadata. |
+| `repo.description` | `FS_REPO__DESCRIPTION` | `Private F-Droid repository` | Repository description written into F-Droid index metadata. |
+| `repo.url` | `FS_REPO__URL` | `http://localhost:8000/repo` | Public URL of the repository as Android clients should see it. This should normally end in `/repo`. |
+| `repo.icon` | `FS_REPO__ICON` | unset | Optional repository icon setting. |
+| `repo.keystore_path` | `FS_REPO__KEYSTORE_PATH` | unset | Path to the repository signing keystore. Required for signed F-Droid indexes. |
+| `repo.keystore_pass` | `FS_REPO__KEYSTORE_PASS` | unset | Password for the repository signing keystore. Required when `repo.keystore_path` is set. |
+| `repo.key_alias` | `FS_REPO__KEY_ALIAS` | unset | Alias of the repository signing key inside the keystore. Required for signing. |
+| `repo.key_pass` | `FS_REPO__KEY_PASS` | unset | Password for the repository signing key. Required for signing. |
+| `admin_auth.mode` | `FS_ADMIN_AUTH__MODE` | `none` | Admin UI authentication mode. Supported values are `none`, `basic`, and `oidc`. |
+| `admin_auth.session_secret` | `FS_ADMIN_AUTH__SESSION_SECRET` | `change-me` | Secret used to sign admin session cookies. Change this in any shared or public deployment. |
+| `admin_auth.username` | `FS_ADMIN_AUTH__USERNAME` | `admin` | Username for `basic` admin authentication. |
+| `admin_auth.password` | `FS_ADMIN_AUTH__PASSWORD` | unset | Password for `basic` admin authentication. Required when `admin_auth.mode` is `basic`. |
+| `admin_auth.issuer` | `FS_ADMIN_AUTH__ISSUER` | unset | OIDC issuer URL. Required when `admin_auth.mode` is `oidc`. |
+| `admin_auth.client_id` | `FS_ADMIN_AUTH__CLIENT_ID` | unset | OIDC client ID. Required for OIDC admin login. |
+| `admin_auth.client_secret` | `FS_ADMIN_AUTH__CLIENT_SECRET` | unset | OIDC client secret. Required for OIDC admin login. |
+| `admin_auth.redirect_url` | `FS_ADMIN_AUTH__REDIRECT_URL` | unset | Optional OIDC redirect URL setting. |
+| `admin_auth.scopes` | `FS_ADMIN_AUTH__SCOPES` | `openid profile email` | OIDC scopes requested during admin login. |
+| `download_auth.mode` | `FS_DOWNLOAD_AUTH__MODE` | `none` | Repository download authentication mode. Supported values are `none` and `basic`. |
+| `download_auth.username` | `FS_DOWNLOAD_AUTH__USERNAME` | `fdroid` | Username for `basic` repository download authentication. |
+| `download_auth.password` | `FS_DOWNLOAD_AUTH__PASSWORD` | unset | Password for `basic` repository download authentication. Required when `download_auth.mode` is `basic`. |
+| `uploads.onboarding` | `FS_UPLOADS__ONBOARDING` | `tofu_scoped` | Upload onboarding policy. The current supported value pins the first signing certificate for an in-scope package. |
+
+The example compose stack also uses container-specific variables that are not read directly by f-server:
+
+| Environment variable | Used by | Meaning |
+| --- | --- | --- |
+| `POSTGRES_DB` | Postgres container | Database created at first startup. Must match the database name in `database_url`. |
+| `POSTGRES_USER` | Postgres container | Database user created at first startup. Must match the user in `database_url`. |
+| `POSTGRES_PASSWORD` | Postgres container | Database password created at first startup. Must match the password in `database_url`. |
+| `MINIO_ROOT_USER` | MinIO container | MinIO admin/access key used by the sample stack. Must match `storage.access_key` unless you create separate credentials. |
+| `MINIO_ROOT_PASSWORD` | MinIO container | MinIO admin/secret key used by the sample stack. Must match `storage.secret_key` unless you create separate credentials. |
+
+Upload clients and CI jobs use non-`FS_` variables because they are not configuring the server process:
+
+| Environment variable | Used by | Meaning |
+| --- | --- | --- |
+| `FSERVER_URL` | Upload client or CI job | Base URL of the f-server instance, for example `https://f-server.example.com`. |
+| `FSERVER_API_KEY` | Upload client or CI job | Bearer token created in f-server for a specific project/package scope. Store this as a CI secret. |
+
 Repo signing requires `keytool`, `jarsigner`, and `apksigner` on the host or container image.
 
 ## Upload security
