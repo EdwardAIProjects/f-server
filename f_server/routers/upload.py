@@ -82,6 +82,13 @@ def upload_apk(
             )
         )
         if existing:
+            metadata_changed = _apply_apk_info(existing, info)
+            if metadata_changed:
+                session.flush()
+                index_files = rebuild_repo(session)
+            else:
+                index_files = []
+            session.commit()
             audit_event(
                 session,
                 request,
@@ -91,7 +98,7 @@ def upload_apk(
                 info.version_code,
                 "200-idempotent",
             )
-            return _response("exists", existing, [])
+            return _response("exists", existing, index_files)
 
         app = session.get(App, info.package_name)
         if app is None:
@@ -206,6 +213,23 @@ def _update_app_metadata(app: App, metadata: UploadMetadata) -> None:
         app.description = metadata.description
     if metadata.categories:
         app.categories = metadata.categories
+
+
+def _apply_apk_info(version: Version, info: ApkInfo) -> bool:
+    changed = False
+    fields = {
+        "version_name": info.version_name,
+        "min_sdk": info.min_sdk,
+        "target_sdk": info.target_sdk,
+        "max_sdk": info.max_sdk,
+        "nativecode": list(info.nativecode),
+        "permissions": list(info.permissions),
+    }
+    for field, value in fields.items():
+        if getattr(version, field) != value:
+            setattr(version, field, value)
+            changed = True
+    return changed
 
 
 def _store_icon(session: Session, icon: UploadFile, package_name: str) -> None:

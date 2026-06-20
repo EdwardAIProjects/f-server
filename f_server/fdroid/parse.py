@@ -43,7 +43,7 @@ def parse_apk(path: str | Path) -> ApkInfo:
     target_sdk = _safe_int(getattr(apk, "get_target_sdk_version", lambda: None)())
     max_sdk = _safe_int(getattr(apk, "get_max_sdk_version", lambda: None)())
     permissions = tuple(sorted(getattr(apk, "get_permissions", lambda: [])() or []))
-    nativecode = tuple(sorted(getattr(apk, "get_libraries", lambda: [])() or []))
+    nativecode = tuple(common.get_native_code(apk_path))
     label = getattr(apk, "get_app_name", lambda: None)()
 
     return ApkInfo(
