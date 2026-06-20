@@ -240,7 +240,7 @@ async def login(request: Request):
     if not oidc_enabled():
         return RedirectResponse("/admin", status_code=303)
     client = oidc_client()
-    redirect_uri = str(request.url_for("oidc_callback"))
+    redirect_uri = get_settings().admin_auth.redirect_url or str(request.url_for("oidc_callback"))
     return await client.authorize_redirect(request, redirect_uri, code_challenge_method="S256")
 
 
