@@ -21,7 +21,11 @@
           <td>{{ version.version_name or "" }}</td>
           <td><code>{{ version.apk_name }}</code></td>
           <td><code>{{ version.signer_fingerprint[:12] }}</code></td>
-          <td><form method="post" action="/admin/versions/{{ version.id }}/delete"><button type="submit">Delete</button></form></td>
+          <td>
+            <form class="inline-form" method="post" action="/admin/versions/{{ version.id }}/delete" onsubmit="return confirm('Delete this version from the repository? This cannot be undone.');">
+              <button class="danger" type="submit">Delete</button>
+            </form>
+          </td>
         </tr>
       {% endfor %}
       </tbody>
@@ -40,6 +44,14 @@
       <label>SHA-256 fingerprint <input name="fingerprint" minlength="64" maxlength="95" required></label>
       <button type="submit">Add key</button>
     </form>
+    <section class="danger-zone">
+      <h2>Delete project</h2>
+      <p>Remove this project, all versions, and uploaded assets from the repository.</p>
+      <form method="post" action="/admin/apps/{{ app.package_name }}/delete" onsubmit='const packageName = {{ app.package_name | tojson }}; if (!confirm("Delete this entire project and all versions? This cannot be undone.")) return false; const typed = prompt("Type " + packageName + " to confirm deletion:"); if (typed !== packageName) return false; this.confirm_package_name.value = typed; return true;'>
+        <input type="hidden" name="confirm_package_name" value="">
+        <button class="danger" type="submit">Delete project</button>
+      </form>
+    </section>
   </aside>
 </section>
 {% endblock %}

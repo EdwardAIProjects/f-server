@@ -13,6 +13,7 @@ from f_server.db import get_session
 from f_server.fdroid.sign import SigningConfigurationError
 from f_server.models import AllowedSigningKey, ApiKey, App, AuditLog, RegistrySettings, Version
 from f_server.services.rebuild import rebuild_repo
+from f_server.storage import get_storage
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="f_server/templates")
@@ -97,10 +98,35 @@ def delete_version(
     if version is None:
         raise HTTPException(status_code=404, detail="version not found")
     package_name = version.package_name
+    _delete_storage_keys([version.storage_key])
     session.delete(version)
     session.commit()
     rebuild_repo(session)
     return RedirectResponse(f"/admin/apps/{package_name}", status_code=303)
+
+
+@router.post("/apps/{package_name}/delete")
+def delete_app(
+    package_name: str,
+    confirm_package_name: str = Form(""),
+    admin: str = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    if confirm_package_name != package_name:
+        raise HTTPException(status_code=400, detail="package name confirmation did not match")
+    app = session.scalar(
+        select(App)
+        .where(App.package_name == package_name)
+        .options(selectinload(App.versions), selectinload(App.assets))
+    )
+    if app is None:
+        raise HTTPException(status_code=404, detail="app not found")
+    _delete_storage_keys([version.storage_key for version in app.versions])
+    _delete_storage_keys([asset.storage_key for asset in app.assets])
+    session.delete(app)
+    session.commit()
+    rebuild_repo(session)
+    return RedirectResponse("/admin", status_code=303)
 
 
 @router.post("/keys")
@@ -303,3 +329,9 @@ def _registry_settings(session: Session) -> RegistrySettings:
         registry_settings = RegistrySettings(id=1, username="fdroid")
         session.add(registry_settings)
     return registry_settings
+
+
+def _delete_storage_keys(keys: list[str]) -> None:
+    storage = get_storage()
+    for key in sorted(set(keys)):
+        storage.delete(key)

@@ -48,7 +48,9 @@
           <td>{{ "revoked" if key.revoked else "active" }}</td>
           <td>
             {% if not key.revoked %}
-            <form method="post" action="/admin/keys/{{ key.id }}/revoke"><button type="submit">Revoke</button></form>
+            <form class="inline-form" method="post" action="/admin/keys/{{ key.id }}/revoke" onsubmit="return confirm('Revoke this API key? Existing CI jobs using it will stop working.');">
+              <button class="danger" type="submit">Revoke</button>
+            </form>
             {% endif %}
           </td>
         </tr>

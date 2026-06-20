@@ -114,6 +114,11 @@ form {
   margin: 0 0 18px;
 }
 
+.inline-form {
+  display: inline-grid;
+  margin: 0;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -142,6 +147,27 @@ button {
   font: inherit;
   font-weight: 700;
   padding: 8px 12px;
+}
+
+button.danger {
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+button.danger:hover {
+  background: #991b1b;
+}
+
+.danger-zone {
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+  padding-top: 18px;
+}
+
+.danger-zone p {
+  color: #4b5563;
+  line-height: 1.45;
+  margin: 0 0 14px;
 }
 
 .button-link {
