@@ -6,7 +6,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 import qrcode
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from qrcode.image.svg import SvgPathImage
@@ -34,6 +34,10 @@ def create_app() -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> FileResponse:
+        return FileResponse("f_server/static/favicon.ico")
 
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request):

@@ -17,9 +17,11 @@ def test_homepage_renders(monkeypatch) -> None:
 
     with TestClient(app) as client:
         response = client.get("/")
+        favicon = client.get("/favicon.ico")
 
     assert response.status_code == 200
     assert "f-server" in response.text
+    assert 'href="/static/favicon.ico"' in response.text
     assert 'href="/admin"' in response.text
     assert 'href="/add-repository"' in response.text
     assert 'href="/repo/index-v2.json"' in response.text
@@ -27,6 +29,7 @@ def test_homepage_renders(monkeypatch) -> None:
     assert "Upload API" not in response.text
     assert "F-Droid repository server" not in response.text
     assert "f-server accepts scoped CI uploads" not in response.text
+    assert favicon.status_code == 200
 
 
 def test_add_repository_qr_page_renders(monkeypatch) -> None:
