@@ -4,7 +4,7 @@ from io import BytesIO
 
 import pytest
 from fastapi import HTTPException
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from f_server.routers.repo import get_repo_file
 
@@ -30,8 +30,8 @@ class UrlStorage:
         return BytesIO(self.objects[key])
 
 
-@pytest.mark.parametrize("path", ["entry.jar", "index-v1.jar", "index-v2.json"])
-def test_fdroid_index_files_are_served_without_redirect(path, monkeypatch) -> None:
+@pytest.mark.parametrize("path", ["entry.jar", "index-v1.jar", "index-v2.json", "app.apk"])
+def test_repo_files_are_served_without_redirect(path, monkeypatch) -> None:
     storage = UrlStorage()
     monkeypatch.setattr("f_server.routers.repo.get_storage", lambda: storage)
 
@@ -39,17 +39,6 @@ def test_fdroid_index_files_are_served_without_redirect(path, monkeypatch) -> No
 
     assert isinstance(response, StreamingResponse)
     assert storage.urls_requested == []
-
-
-def test_apk_uses_storage_redirect_when_available(monkeypatch) -> None:
-    storage = UrlStorage()
-    monkeypatch.setattr("f_server.routers.repo.get_storage", lambda: storage)
-
-    response = get_repo_file("app.apk")
-
-    assert isinstance(response, RedirectResponse)
-    assert response.headers["location"] == "https://objects.example.com/repo/app.apk"
-    assert storage.urls_requested == ["repo/app.apk"]
 
 
 def test_missing_fdroid_index_file_returns_404(monkeypatch) -> None:
