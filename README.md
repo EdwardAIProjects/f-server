@@ -41,6 +41,11 @@ admin_auth:
 uploads:
   onboarding: tofu_scoped
   verify_signing_keys: true
+notifications:
+  # optional Discord webhook for newly published app versions
+  # discord_webhook_url: https://discord.com/api/webhooks/...
+  discord_username: f-server
+  discord_timeout_seconds: 5.0
 ```
 
 ### Configuration reference
@@ -77,6 +82,9 @@ The YAML keys below can be set in `config.yaml`. The equivalent environment vari
 | `admin_auth.scopes` | `FS_ADMIN_AUTH__SCOPES` | `openid profile email` | OIDC scopes requested during admin login. |
 | `uploads.onboarding` | `FS_UPLOADS__ONBOARDING` | `tofu_scoped` | Upload onboarding policy. The current supported value pins the first signing certificate for an in-scope package when signing-key verification is enabled. |
 | `uploads.verify_signing_keys` | `FS_UPLOADS__VERIFY_SIGNING_KEYS` | `true` | Whether uploads must match pinned APK signing certificates. Set to `false` to skip first-upload pinning and later signing-key mismatch rejection. |
+| `notifications.discord_webhook_url` | `FS_NOTIFICATIONS__DISCORD_WEBHOOK_URL` | unset | Optional Discord webhook URL. When set, f-server sends a message after each newly published app version. Idempotent re-uploads do not send duplicate messages. |
+| `notifications.discord_username` | `FS_NOTIFICATIONS__DISCORD_USERNAME` | `f-server` | Display username used by Discord webhook messages. |
+| `notifications.discord_timeout_seconds` | `FS_NOTIFICATIONS__DISCORD_TIMEOUT_SECONDS` | `5.0` | Timeout for sending Discord webhook messages. Notification failures are logged and do not fail the upload. |
 
 The example compose stack also uses container-specific variables that are not read directly by f-server:
 

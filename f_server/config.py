@@ -48,6 +48,12 @@ class UploadsConfig(BaseModel):
     verify_signing_keys: bool = True
 
 
+class NotificationsConfig(BaseModel):
+    discord_webhook_url: str | None = None
+    discord_username: str = "f-server"
+    discord_timeout_seconds: float = 5.0
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="FS_",
@@ -61,6 +67,7 @@ class Settings(BaseSettings):
     repo: RepoConfig = Field(default_factory=RepoConfig)
     admin_auth: AdminAuthConfig = Field(default_factory=AdminAuthConfig)
     uploads: UploadsConfig = Field(default_factory=UploadsConfig)
+    notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
 
 
 def _read_yaml(path: Path) -> dict:

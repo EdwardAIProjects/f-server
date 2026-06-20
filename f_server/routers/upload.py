@@ -18,6 +18,7 @@ from f_server.db import get_session
 from f_server.fdroid.parse import ApkInfo, parse_apk
 from f_server.models import ApiKey, App, Asset, Version, utcnow
 from f_server.security.pinning import pin_first_signer, signer_allowed
+from f_server.services.notifications import notify_app_published
 from f_server.services.rebuild import rebuild_repo
 from f_server.storage import get_storage
 
@@ -56,7 +57,8 @@ def upload_apk(
     session: Session = Depends(get_session),
 ) -> UploadResponse:
     parsed_metadata = _parse_metadata(metadata)
-    verify_signing_keys = get_settings().uploads.verify_signing_keys
+    settings = get_settings()
+    verify_signing_keys = settings.uploads.verify_signing_keys
     with tempfile.TemporaryDirectory(prefix="f-server-upload-") as tmp:
         tmp_apk = Path(tmp) / "upload.apk"
         sha256 = hashlib.sha256()
@@ -154,6 +156,7 @@ def upload_apk(
         session.refresh(version)
         index_files = rebuild_repo(session)
         audit_event(session, request, api_key.label, "upload", info.package_name, info.version_code, "201")
+        notify_app_published(app, version, settings.repo, settings.notifications)
         return _response("created", version, index_files)
 
 
