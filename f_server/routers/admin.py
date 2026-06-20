@@ -29,6 +29,15 @@ def dashboard(
     return templates.TemplateResponse(request, "admin/index.html", _dashboard_context(session))
 
 
+@router.get("/keys", response_class=HTMLResponse)
+def api_keys(
+    request: Request,
+    admin: str = Depends(require_admin),
+    session: Session = Depends(get_session),
+):
+    return templates.TemplateResponse(request, "admin/keys.html", _api_keys_context(session))
+
+
 @router.get("/apps/{package_name}", response_class=HTMLResponse)
 def app_detail(
     package_name: str,
@@ -141,8 +150,8 @@ def create_key(
     created = create_api_key(session, label, scopes, created_by=admin)
     return templates.TemplateResponse(
         request,
-        "admin/index.html",
-        {**_dashboard_context(session), "new_secret": created.secret},
+        "admin/keys.html",
+        {**_api_keys_context(session), "new_secret": created.secret},
     )
 
 
@@ -157,7 +166,7 @@ def revoke_key(
         raise HTTPException(status_code=404, detail="API key not found")
     api_key.revoked = True
     session.commit()
-    return RedirectResponse("/admin", status_code=303)
+    return RedirectResponse("/admin/keys", status_code=303)
 
 
 @router.post("/rebuild")
@@ -294,9 +303,14 @@ def _dashboard_context(session: Session) -> dict:
     apps = session.scalars(
         select(App).options(selectinload(App.versions), selectinload(App.signing_keys)).order_by(App.package_name)
     ).all()
-    keys = session.scalars(select(ApiKey).order_by(ApiKey.created_at.desc())).all()
     return {
         "apps": apps,
+    }
+
+
+def _api_keys_context(session: Session) -> dict:
+    keys = session.scalars(select(ApiKey).order_by(ApiKey.created_at.desc())).all()
+    return {
         "keys": keys,
     }
 

@@ -1,0 +1,45 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<section class="split">
+  <div>
+    <h1>API Keys</h1>
+    {% if new_secret %}
+    <div class="notice">
+      <strong>New key secret</strong>
+      <code>{{ new_secret }}</code>
+    </div>
+    {% endif %}
+    <table>
+      <thead><tr><th>Label</th><th>Scopes</th><th>Status</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+      <tbody>
+      {% for key in keys %}
+        <tr>
+          <td>{{ key.label }}</td>
+          <td><code>{{ key.allowed_package_globs | join(", ") }}</code></td>
+          <td>{{ "revoked" if key.revoked else "active" }}</td>
+          <td>{{ key.created_at.strftime("%Y-%m-%d %H:%M") if key.created_at else "" }}</td>
+          <td>{{ key.last_used_at.strftime("%Y-%m-%d %H:%M") if key.last_used_at else "never" }}</td>
+          <td>
+            {% if not key.revoked %}
+            <form class="inline-form" method="post" action="/admin/keys/{{ key.id }}/revoke" onsubmit="return confirm('Revoke this API key? Existing CI jobs using it will stop working.');">
+              <button class="danger" type="submit">Revoke</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6">No API keys created yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <aside>
+    <h2>Create Key</h2>
+    <form method="post" action="/admin/keys">
+      <label>Label <input name="label" required></label>
+      <label>Scopes <input name="scope" placeholder="com.example.app or *" required></label>
+      <button type="submit">Create key</button>
+    </form>
+  </aside>
+</section>
+{% endblock %}
