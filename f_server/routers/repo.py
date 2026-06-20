@@ -11,6 +11,8 @@ from f_server.storage.local import LocalStorage
 
 router = APIRouter(prefix="/repo", tags=["repo"], dependencies=[Depends(require_download_auth)])
 
+FDROID_INDEX_FILES = {"entry.jar", "entry.json", "index-v1.jar", "index-v1.json", "index-v2.json"}
+
 
 @router.get("/{path:path}")
 def get_repo_file(path: str):
@@ -18,14 +20,20 @@ def get_repo_file(path: str):
         raise HTTPException(status_code=404, detail="not found")
     key = f"repo/{path}"
     storage = get_storage()
+    if path in FDROID_INDEX_FILES:
+        return _storage_response(storage, key, path)
     url = storage.url_for(key)
     if url:
         return RedirectResponse(url)
+    return _storage_response(storage, key, path)
+
+
+def _storage_response(storage, key: str, path: str):
     if isinstance(storage, LocalStorage):
         local_path = storage.local_path(key)
         if not local_path.exists():
             raise HTTPException(status_code=404, detail="not found")
-        return FileResponse(local_path)
+        return FileResponse(local_path, media_type=_media_type(Path(path).suffix))
     if not storage.exists(key):
         raise HTTPException(status_code=404, detail="not found")
     media_type = _media_type(Path(path).suffix)
